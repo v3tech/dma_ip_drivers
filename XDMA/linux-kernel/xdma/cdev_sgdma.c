@@ -104,7 +104,17 @@ static void async_io_handler(unsigned long  cb_hndl, int err)
 	if (caio->cmpl_cnt == caio->req_cnt) {
 		res = caio->res;
 		res2 = caio->res2;
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 16, 0)
+#if defined(RHEL_RELEASE_CODE)
+    #if (RHEL_RELEASE_CODE >= RHEL_RELEASE_VERSION(9, 4))
+                caio->iocb->ki_complete(caio->iocb, caio->err_cnt ? res2 : res);
+    #elif LINUX_VERSION_CODE >= KERNEL_VERSION(5, 16, 0)
+                caio->iocb->ki_complete(caio->iocb, caio->err_cnt ? res2 : res);
+    #elif LINUX_VERSION_CODE >= KERNEL_VERSION(4, 1, 0)
+                caio->iocb->ki_complete(caio->iocb, res, res2);
+    #else
+                aio_complete(caio->iocb, res, res2);
+    #endif
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(5, 16, 0)
 		caio->iocb->ki_complete(caio->iocb, caio->err_cnt ? res2 : res);
 #elif LINUX_VERSION_CODE >= KERNEL_VERSION(4, 1, 0)
 		caio->iocb->ki_complete(caio->iocb, res, res2);
@@ -121,7 +131,17 @@ skip_tran:
 	return;
 
 skip_dev_lock:
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 16, 0)
+#if defined(RHEL_RELEASE_CODE)
+    #if (RHEL_RELEASE_CODE >= RHEL_RELEASE_VERSION(9, 4))
+        caio->iocb->ki_complete(caio->iocb, caio->err_cnt ? res2 : res);
+    #elif LINUX_VERSION_CODE >= KERNEL_VERSION(5, 16, 0)
+        caio->iocb->ki_complete(caio->iocb, -EBUSY);
+    #elif LINUX_VERSION_CODE >= KERNEL_VERSION(4, 1, 0)
+        caio->iocb->ki_complete(caio->iocb, numbytes, -EBUSY);
+    #else
+        aio_complete(caio->iocb, numbytes, -EBUSY);
+    #endif
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(5, 16, 0)
 	caio->iocb->ki_complete(caio->iocb, -EBUSY);
 #elif LINUX_VERSION_CODE >= KERNEL_VERSION(4, 1, 0)
 	caio->iocb->ki_complete(caio->iocb, numbytes, -EBUSY);
@@ -232,7 +252,6 @@ static int check_transfer_align(struct xdma_engine *engine,
 
 /*
  * Map a user memory range into a scatterlist
- * inspired by vhost_scsi_map_to_sgl()
  * Returns the number of scatterlist entries used or -errno on error.
  */
 static inline void xdma_io_cb_release(struct xdma_io_cb *cb)
@@ -566,14 +585,35 @@ static ssize_t cdev_aio_read(struct kiocb *iocb, const struct iovec *io,
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 16, 0)
 static ssize_t cdev_write_iter(struct kiocb *iocb, struct iov_iter *io)
 {
+#if defined(RHEL_RELEASE_CODE)
+        #if (RHEL_RELEASE_CODE >= RHEL_RELEASE_VERSION(9, 4))
+            return cdev_aio_write(iocb, iter_iov(io), io->nr_segs, io->iov_offset);
+        #else
+            return cdev_aio_write(iocb, io->iov, io->nr_segs, io->iov_offset);
+        #endif
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(6, 4, 0)
+        return cdev_aio_write(iocb, iter_iov(io), io->nr_segs, io->iov_offset);
+#else
 	return cdev_aio_write(iocb, io->iov, io->nr_segs, io->iov_offset);
+#endif
 }
 
 static ssize_t cdev_read_iter(struct kiocb *iocb, struct iov_iter *io)
 {
-	return cdev_aio_read(iocb, io->iov, io->nr_segs, io->iov_offset);
+#if defined(RHEL_RELEASE_CODE)
+        #if (RHEL_RELEASE_CODE >= RHEL_RELEASE_VERSION(9, 4))
+            return cdev_aio_read(iocb, iter_iov(io), io->nr_segs, io->iov_offset);
+        #else
+            return cdev_aio_read(iocb, io->iov, io->nr_segs, io->iov_offset);
+        #endif
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(6, 4, 0)
+        return cdev_aio_read(iocb, iter_iov(io), io->nr_segs, io->iov_offset);
+#else
+        return cdev_aio_read(iocb, io->iov, io->nr_segs, io->iov_offset);
+#endif
 }
 #endif
+
 
 static int ioctl_do_perf_start(struct xdma_engine *engine, unsigned long arg)
 {
@@ -735,6 +775,16 @@ static int ioctl_do_align_get(struct xdma_engine *engine, unsigned long arg)
 	return put_user(engine->addr_align, (int __user *)arg);
 }
 
+static int ioctl_do_numanode_get(struct xdma_engine *engine, unsigned long arg)
+{
+	if (!engine) {
+		pr_err("Invalid DMA engine\n");
+		return -EINVAL;
+	}
+
+	dbg_perf("IOCTL_XDMA_ALIGN_GET\n");
+	return put_user(engine->xdev->pdev->dev.numa_node, (int __user *)arg);
+}
 
 static int ioctl_do_aperture_dma(struct xdma_engine *engine, unsigned long arg,
 				bool write)
@@ -840,6 +890,9 @@ static long char_sgdma_ioctl(struct file *file, unsigned int cmd,
 		break;
 	case IOCTL_XDMA_APERTURE_W:
 		rv = ioctl_do_aperture_dma(engine, arg, 1);
+		break;
+	case IOCTL_XDMA_NUMANODE_GET:
+		rv = ioctl_do_numanode_get(engine, arg);
 		break;
 	default:
 		dbg_perf("Unsupported operation\n");

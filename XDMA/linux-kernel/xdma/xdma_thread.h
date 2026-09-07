@@ -113,7 +113,7 @@ struct xdma_kthread {
 /**
  * xdma_threads_create() - create xdma threads
 *********/
-int xdma_threads_create(unsigned int num_threads);
+int xdma_threads_create(unsigned int num_threads, int numa_node);
 
 /*****************************************************************************/
 /**
@@ -144,4 +144,6 @@ void xdma_thread_remove_work(struct xdma_engine *engine);
  *****************************************************************************/
 void xdma_thread_add_work(struct xdma_engine *engine);
 
+int xdma_kthread_start(struct xdma_kthread *thp, char *name, int id);
+int xdma_kthread_stop(struct xdma_kthread *thp);
 #endif /* #ifndef __XDMA_KTHREAD_H__ */

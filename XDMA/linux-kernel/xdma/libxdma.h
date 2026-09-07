@@ -76,9 +76,10 @@
 #define XDMA_BAR_SIZE (0x8000UL)
 
 /* Use this definition to poll several times between calls to schedule */
+//#define NUM_POLLS_PER_SCHED 100
 #define NUM_POLLS_PER_SCHED 100
 
-#define XDMA_CHANNEL_NUM_MAX (4)
+#define XDMA_CHANNEL_NUM_MAX (2)
 /*
  * interrupts per engine, rad2_vul.sv:237
  * .REG_IRQ_OUT	(reg_irq_from_ch[(channel*2) +: 2]),
@@ -483,7 +484,11 @@ struct xdma_request_cb {
 
 	unsigned int sw_desc_idx;
 	unsigned int sw_desc_cnt;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 8, 0)
+        struct sw_desc sdesc[];
+#else
 	struct sw_desc sdesc[0];
+#endif
 };
 
 struct xdma_engine {

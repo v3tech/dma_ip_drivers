@@ -117,10 +117,12 @@ static int xthread_main(void *data)
 		if (thp->work_cnt) {
 			pr_debug_thread("%s processing %u work items\n",
 					thp->name, thp->work_cnt);
+			unlock_thread(thp);
 			/* do work */
 			list_for_each_safe(work_item, next, &thp->work_list) {
 				thp->fproc(work_item);
 			}
+			lock_thread(thp);
 		}
 		unlock_thread(thp);
 		schedule();
@@ -273,7 +275,7 @@ void xdma_thread_add_work(struct xdma_engine *engine)
 	spin_unlock_irqrestore(&engine->lock, flags);
 }
 
-int xdma_threads_create(unsigned int num_threads)
+int xdma_threads_create(unsigned int num_threads, int numa_node)
 {
 	struct xdma_kthread *thp;
 	int rv;
@@ -294,8 +296,18 @@ int xdma_threads_create(unsigned int num_threads)
 	/* N dma writeback monitoring threads */
 	thp = cs_threads;
 	for_each_online_cpu(cpu) {
-		pr_debug("index %d cpu %d online\n", thread_cnt, cpu);
-		thp->cpu = cpu;
+		int node = cpu_to_node(cpu);
+		//if (numa_node != NUMA_NO_NODE) {
+		//	if (node != numa_node)
+		//		continue;
+		//	else {
+		//		pr_info("index %d cpu %d online\n", thread_cnt, cpu);
+		//		thp->cpu = cpu;
+		//	}
+		//} else {
+			thp->cpu = (num_online_cpus() - 1) - cpu;
+			pr_info("index %d cpu %d online\n", thread_cnt, thp->cpu);
+		//}
 		thp->timeout = 0;
 		thp->fproc = xdma_thread_cmpl_status_proc;
 		thp->fpending = xdma_thread_cmpl_status_pend;
