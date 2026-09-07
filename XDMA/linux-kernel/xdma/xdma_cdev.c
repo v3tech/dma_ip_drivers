@@ -210,6 +210,9 @@ int char_close(struct inode *inode, struct file *file)
 		return -EINVAL;
 	}
 
+	/* Releases any opt-in long-term DMA mapping owned by this open file. */
+	xdma_dma_close_file(file);
+
 	return 0;
 }
 
@@ -463,6 +466,9 @@ void xpdev_destroy_interfaces(struct xdma_pci_dev *xpdev)
 		unregister_chrdev_region(
 				MKDEV(xpdev->major, XDMA_MINOR_BASE),
 				XDMA_MINOR_COUNT);
+
+	/* No users can acquire a pooled ring after the interfaces are gone. */
+	xdma_dma_cleanup_reusable(&xpdev->pdev->dev);
 }
 
 int xpdev_create_interfaces(struct xdma_pci_dev *xpdev)
@@ -603,7 +609,17 @@ fail:
 
 int xdma_cdev_init(void)
 {
-	g_xdma_class = class_create(THIS_MODULE, XDMA_NODE_NAME);
+#if defined(RHEL_RELEASE_CODE)
+    #if (RHEL_RELEASE_CODE >= RHEL_RELEASE_VERSION(9, 4))
+        g_xdma_class = class_create(XDMA_NODE_NAME);
+    #else
+        g_xdma_class = class_create(THIS_MODULE, XDMA_NODE_NAME);
+    #endif
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(6, 4, 0)
+        g_xdma_class = class_create(XDMA_NODE_NAME);
+#else
+        g_xdma_class = class_create(THIS_MODULE, XDMA_NODE_NAME);
+#endif
 	if (IS_ERR(g_xdma_class)) {
 		dbg_init(XDMA_NODE_NAME ": failed to create class");
 		return -EINVAL;

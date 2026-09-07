@@ -21,6 +21,7 @@
 #define _XDMA_IOCALLS_POSIX_H_
 
 #include <linux/ioctl.h>
+#include <linux/types.h>
 
 /* Use 'x' as magic number */
 #define XDMA_IOC_MAGIC	'x'
@@ -51,8 +52,60 @@ enum XDMA_IOC_TYPES {
 	XDMA_IOC_INFO,
 	XDMA_IOC_OFFLINE,
 	XDMA_IOC_ONLINE,
+	XDMA_IOC_NUMANODE,
+	XDMA_IOC_DMA_MAP_REGISTER,
+	XDMA_IOC_DMA_MAP_UNREGISTER,
+	XDMA_IOC_DMA_SYNC_FOR_CPU,
+	XDMA_IOC_DMA_SYNC_FOR_DEVICE,
+	XDMA_IOC_DMA_COHERENT_ALLOC,
+	XDMA_IOC_DMA_RELEASE_FENCE,
 	XDMA_IOC_MAX
 };
+
+#define XDMA_DMA_COHERENT_MMAP_OFFSET	0x40000000ULL
+#define XDMA_DMA_OWNER_MAGIC		0x84000000U
+#define XDMA_DMA_OWNER_DIRECTION_RX	0x00000100U
+#define XDMA_DMA_OWNER_SUBCARD1		0x00000200U
+#define XDMA_DMA_OWNER_MASK		0xfffffcffU
+
+/*
+ * Diagnostic interface for a persistent user-buffer DMA mapping.  The XDMA
+ * bypass RTL consumes one linear DMA address, so the driver rejects mappings
+ * whose DMA segments are not contiguous.  This is intentionally opt-in and
+ * does not alter the normal XDMA read/write path.
+ */
+struct xdma_ioc_dma_map {
+	__u64 user_addr;
+	__u64 length;
+	__u64 dma_addr;
+	__u32 mapped_nents;
+	__u32 flags; /* in: OWNER_MAGIC|direction|subcard; out: same|type bits */
+};
+
+struct xdma_ioc_dma_sync {
+	__u64 offset;
+	__u64 length;
+};
+
+/* Authorize release of one coherent ring only after the matching engine has
+ * stopped. direction: 0 H2C (device reads host), 1 C2H (device writes host).
+ * For RX, accepted is the absolute monotonic FPGA counter and completed is the
+ * generation-relative XDMA counter; the driver records the accepted baseline
+ * when the C2H address is published. TX accepted must equal completed.
+ */
+struct xdma_ioc_dma_release_fence {
+	__u64 dma_addr;
+	__u32 subcard;
+	__u32 direction;
+	__u32 reset_epoch;
+	__u32 accepted;
+	__u32 completed;
+	__u32 flags; /* 1 publish, 2 completed fence, 3 cancel, 4 admin recovery */
+};
+#define XDMA_DMA_STATE_PUBLISH	1U
+#define XDMA_DMA_STATE_FENCE	2U
+#define XDMA_DMA_STATE_CANCEL	3U
+#define XDMA_DMA_STATE_RECOVER	4U
 
 struct xdma_ioc_base {
 	unsigned int magic;
@@ -79,6 +132,24 @@ struct xdma_ioc_info {
 					struct xdma_ioc_info)
 #define XDMA_IOCOFFLINE		_IO(XDMA_IOC_MAGIC, XDMA_IOC_OFFLINE)
 #define XDMA_IOCONLINE		_IO(XDMA_IOC_MAGIC, XDMA_IOC_ONLINE)
+#define XDMA_IOCNUMANODE		_IOR(XDMA_IOC_MAGIC, XDMA_IOC_NUMANODE, int)
+#define XDMA_IOCDMAMAPREGISTER	_IOWR(XDMA_IOC_MAGIC, \
+					XDMA_IOC_DMA_MAP_REGISTER, \
+					struct xdma_ioc_dma_map)
+#define XDMA_IOCDMAMAPUNREGISTER _IO(XDMA_IOC_MAGIC, \
+					 XDMA_IOC_DMA_MAP_UNREGISTER)
+#define XDMA_IOCDMASYNCFORCPU	_IOW(XDMA_IOC_MAGIC, \
+					 XDMA_IOC_DMA_SYNC_FOR_CPU, \
+					 struct xdma_ioc_dma_sync)
+#define XDMA_IOCDMASYNCFORDEVICE _IOW(XDMA_IOC_MAGIC, \
+					  XDMA_IOC_DMA_SYNC_FOR_DEVICE, \
+					  struct xdma_ioc_dma_sync)
+#define XDMA_IOCDMACOHERENTALLOC _IOWR(XDMA_IOC_MAGIC, \
+					 XDMA_IOC_DMA_COHERENT_ALLOC, \
+					 struct xdma_ioc_dma_map)
+#define XDMA_IOCDMARELEASEFENCE _IOW(XDMA_IOC_MAGIC, \
+					 XDMA_IOC_DMA_RELEASE_FENCE, \
+					 struct xdma_ioc_dma_release_fence)
 
 #define IOCTL_XDMA_ADDRMODE_SET	_IOW('q', 4, int)
 #define IOCTL_XDMA_ADDRMODE_GET	_IOR('q', 5, int)

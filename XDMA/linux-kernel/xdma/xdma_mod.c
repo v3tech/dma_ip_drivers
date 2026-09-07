@@ -209,10 +209,10 @@ static int probe_one(struct pci_dev *pdev, const struct pci_device_id *id)
 		goto err_out;
 	}
 
-	pr_info("%s xdma%d, pdev 0x%p, xdev 0x%p, 0x%p, usr %d, ch %d,%d.\n",
+	pr_info("%s xdma%d, pdev 0x%p, xdev 0x%p, 0x%p, usr %d, ch %d,%d numa_node %d.\n",
 		dev_name(&pdev->dev), xdev->idx, pdev, xpdev, xdev,
 		xpdev->user_max, xpdev->h2c_channel_max,
-		xpdev->c2h_channel_max);
+		xpdev->c2h_channel_max, dev_to_node(&pdev->dev));
 
 	xpdev->xdev = hndl;
 

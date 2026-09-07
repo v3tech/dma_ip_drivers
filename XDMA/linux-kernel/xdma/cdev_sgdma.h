@@ -78,5 +78,6 @@ struct xdma_aperture_ioctl {
 #define IOCTL_XDMA_ALIGN_GET    _IOR('q', 6, int)
 #define IOCTL_XDMA_APERTURE_R   _IOW('q', 7, struct xdma_aperture_ioctl *)
 #define IOCTL_XDMA_APERTURE_W   _IOW('q', 8, struct xdma_aperture_ioctl *)
+#define IOCTL_XDMA_NUMANODE_GET _IOR('q', 9, int)
 
 #endif /* _XDMA_IOCALLS_POSIX_H_ */

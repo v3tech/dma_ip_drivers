@@ -1,5 +1,18 @@
 # Xilinx DMA IP Reference drivers
 
+## YunSDR XDMA extension
+
+The XDMA Linux driver under `XDMA/linux-kernel` includes the YunSDR ARM64/x86_64
+extension merged from
+[`lichen813-gif/XDMA-Driver-YunSDR`](https://github.com/lichen813-gif/XDMA-Driver-YunSDR).
+It adds the coherent DMA ring/IOVA userspace ABI, release fencing and recovery,
+newer-kernel compatibility, and the YunSDR polling/MRRS configuration while
+retaining the traditional XDMA interfaces.
+
+Build, installation, source provenance, compatibility requirements, and the
+exact integration scope are documented in
+[`XDMA/YUNSDR_INTEGRATION_zh.md`](XDMA/YUNSDR_INTEGRATION_zh.md).
+
 ## Xilinx QDMA
 
 The Xilinx PCI Express Multi Queue DMA (QDMA) IP provides high-performance direct memory access (DMA) via PCI Express. The PCIe QDMA can be implemented in UltraScale+ devices.

@@ -34,7 +34,7 @@
 
 
 /* Module Parameters */
-static unsigned int poll_mode;
+static unsigned int poll_mode = 1;
 module_param(poll_mode, uint, 0644);
 MODULE_PARM_DESC(poll_mode, "Set 1 for hw polling, default is 0 (interrupts)");
 
@@ -111,7 +111,7 @@ static inline int xdev_list_add(struct xdma_dev *xdev)
 		xdev->idx = 0;
 		if (poll_mode) {
 			int rv = xdma_threads_create(xdev->h2c_channel_max +
-					xdev->c2h_channel_max);
+					xdev->c2h_channel_max, dev_to_node(&xdev->pdev->dev));
 			if (rv < 0) {
 				mutex_unlock(&xdev_mutex);
 				return rv;
@@ -1123,13 +1123,15 @@ static int engine_service(struct xdma_engine *engine, int desc_writeback)
 	 * engine status. For polled mode descriptor completion, this read is
 	 * unnecessary and is skipped to reduce latency
 	 */
-	if ((desc_count == 0) || (err_flag != 0)) {
-		rv = engine_status_read(engine, 1, 0);
-		if (rv < 0) {
-			pr_err("Failed to read engine status\n");
-			return rv;
-		}
-	}
+    if (!poll_mode) {
+	    if ((desc_count == 0) || (err_flag != 0)) {
+		    rv = engine_status_read(engine, 1, 0);
+		    if (rv < 0) {
+			    pr_err("Failed to read engine status\n");
+			    return rv;
+		    }
+	    }
+    }
 
 	/*
 	 * engine was running but is no longer busy, or writeback occurred,
@@ -1150,7 +1152,8 @@ static int engine_service(struct xdma_engine *engine, int desc_writeback)
 	 * from HW.  In polled mode descriptor completion, this read is
 	 * unnecessary and is skipped to reduce latency
 	 */
-	if (!desc_count)
+	if (!desc_count && !poll_mode)
+	//if (!desc_count)
 		desc_count = read_register(&engine->regs->completed_desc_count);
 	dbg_tfr("%s wb 0x%x, desc_count %u, err %u, dequeued %u.\n",
 		engine->name, desc_writeback, desc_count, err_flag,
@@ -1295,6 +1298,7 @@ static u32 engine_service_wb_monitor(struct xdma_engine *engine,
 		if (sched_limit != 0) {
 			if ((sched_limit % NUM_POLLS_PER_SCHED) == 0)
 				schedule();
+				//cond_resched();
 		}
 		sched_limit++;
 	}
@@ -2177,6 +2181,7 @@ static void irq_teardown(struct xdma_dev *xdev)
 	} else if (xdev->irq_line != -1) {
 		dbg_init("Releasing IRQ#%d\n", xdev->irq_line);
 		free_irq(xdev->irq_line, xdev);
+		xdev->irq_line = -1;
 	}
 }
 
@@ -4475,11 +4480,19 @@ void *xdma_device_open(const char *mname, struct pci_dev *pdev, int *user_max,
 	/* enable extended tag */
 	pci_enable_capability(pdev, PCI_EXP_DEVCTL_EXT_TAG);
 
-	/* force MRRS to be 512 */
-	rv = pcie_set_readrq(pdev, 512);
+	/*
+	 * A 1 KiB MRRS is required for sustained full-duplex operation on the
+	 * Jetson C5 path.  pci=pcie_bus_perf makes pcie_set_readrq() clamp MRRS
+	 * to the 256-byte MPS, so update only the endpoint's MRRS field here.
+	 */
+	rv = pcie_capability_clear_and_set_word(pdev, PCI_EXP_DEVCTL,
+			PCI_EXP_DEVCTL_READRQ, 3 << 12);
 	if (rv)
 		pr_info("device %s, error set PCI_EXP_DEVCTL_READRQ: %d.\n",
 			dev_name(&pdev->dev), rv);
+	else if (pcie_get_readrq(pdev) != 1024)
+		pr_warn("device %s, failed to retain 1024-byte MRRS.\n",
+			dev_name(&pdev->dev));
 
 	/* enable bus master capability */
 	pci_set_master(pdev);

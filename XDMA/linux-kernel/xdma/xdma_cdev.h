@@ -42,6 +42,9 @@ void cdev_event_init(struct xdma_cdev *xcdev);
 void cdev_sgdma_init(struct xdma_cdev *xcdev);
 void cdev_bypass_init(struct xdma_cdev *xcdev);
 long char_ctrl_ioctl(struct file *filp, unsigned int cmd, unsigned long arg);
+int xdma_dma_unmap_file(struct file *file);
+void xdma_dma_close_file(struct file *file);
+void xdma_dma_cleanup_reusable(struct device *dev);
 
 void xpdev_destroy_interfaces(struct xdma_pci_dev *xpdev);
 int xpdev_create_interfaces(struct xdma_pci_dev *xpdev);
